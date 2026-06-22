@@ -307,15 +307,15 @@ function render(){
     return `<span class="delta ${cls}">${arrow} ${txt} vs 昨日</span>`;
   }
 
-  /* --- 數據格 --- */
-  const estTag = `<span class="delta est">≈ 估算</span>`;
+  /* --- 數據格（8 格全部都有 vs 昨日 比較；里程估算時數字前加 ≈）--- */
+  const km0 = m.kmEstimated?'≈':'';
   const stats = [
     { num:money(m.income),         delta:fmtDelta(deltaPct(m.income,mPrev.income),'pct'),     lbl:'日收入',  big:true },
     { num:m.hours.toFixed(1)+'hr', delta:fmtDelta(deltaAbs(m.hours,mPrev.hours),'hr'),        lbl:'總工時' },
     { num:money2(m.hourly),        delta:fmtDelta(deltaAbs(m.hourly,mPrev.hourly),'money'),    lbl:'時薪',   small:true },
     { num:m.orders+'單',           delta:fmtDelta(deltaAbs(m.orders,mPrev.orders),'order'),    lbl:'總單量' },
-    { num:(m.kmEstimated?'≈':'')+m.km.toFixed(2)+'km', delta:(m.kmEstimated?estTag:fmtDelta(deltaAbs(m.km,mPrev.km),'km')),          lbl:'里程',   small:true },
-    { num:(m.kmEstimated?'≈':'')+money2(m.perKm),      delta:(m.kmEstimated?estTag:fmtDelta(deltaAbs(m.perKm,mPrev.perKm),'money')),  lbl:'每公里', small:true },
+    { num:km0+m.km.toFixed(2)+'km', delta:fmtDelta(deltaAbs(m.km,mPrev.km),'km'),              lbl:'里程',   small:true },
+    { num:km0+money2(m.perKm),      delta:fmtDelta(deltaAbs(m.perKm,mPrev.perKm),'money'),     lbl:'每公里', small:true },
     { num:m.ordPerHr.toFixed(1),   delta:fmtDelta(deltaAbs(m.ordPerHr,mPrev.ordPerHr),'dec'),  lbl:'均單量' },
     { num:money2(m.avgOrder),      delta:fmtDelta(deltaAbs(m.avgOrder,mPrev.avgOrder),'money'), lbl:'均單價', small:true },
   ];
