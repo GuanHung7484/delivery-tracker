@@ -130,12 +130,15 @@
   .btn-clear{background:none;color:var(--down);font-size:14px;font-weight:600;display:block;
     margin:14px auto 0;border:none;cursor:pointer;}
   .logo{width:26px;height:26px;flex:none;}
+  .stat .delta.est{color:var(--orange);font-weight:700;}
+  .field .note{font-size:12.5px;color:var(--txt3);margin-top:7px;line-height:1.55;}
+  .field .flbl .opt{color:var(--txt3);font-size:12.5px;font-weight:600;margin-left:8px;}
 </style>
 </head>
 <body>
 
 <header>
-  <div class="app">外送收入管家<span class="ver">v1.0</span></div>
+  <div class="app">外送收入管家<span class="ver">v1.1</span></div>
   <div class="rule"></div>
 </header>
 
@@ -177,10 +180,19 @@
   </div>
 
   <div class="field">
-    <div class="flbl">🛵 總里程</div>
+    <div class="flbl">🛵 總里程<span class="opt">留空＝自動估算</span></div>
     <div class="inputs">
-      <div class="one"><input type="number" inputmode="decimal" id="in_km" placeholder="0" min="0" step="0.01"><span class="unit">km</span></div>
+      <div class="one"><input type="number" inputmode="decimal" id="in_km" placeholder="留空會自動估算" min="0" step="0.01"><span class="unit">km</span></div>
     </div>
+    <div class="note">有碼表數字就填這格（最準）。留空的話，App 會用下面「每單平均公里 × 單量」自動估算。</div>
+  </div>
+
+  <div class="field">
+    <div class="flbl">📐 每單平均公里<span class="opt">設定一次就好</span></div>
+    <div class="inputs">
+      <div class="one"><input type="number" inputmode="decimal" id="in_avgkm" placeholder="例如 2.5" min="0" step="0.1"><span class="unit">km/單</span></div>
+    </div>
+    <div class="note">自動估算用。例如平均每單跑 2.5 公里就填 2.5，會套用到所有「沒填總里程」的日子；隨時可調。</div>
   </div>
 
   <div id="platInputs"></div>
@@ -210,6 +222,11 @@ const STORE_KEY = 'gonzo_delivery_v1';
 function loadAll(){ try{ return JSON.parse(localStorage.getItem(STORE_KEY)||'{}'); }catch(e){ return {}; } }
 function saveAll(d){ localStorage.setItem(STORE_KEY, JSON.stringify(d)); }
 
+/* ===== 設定（每單平均公里，跨日共用）===== */
+const SET_KEY = 'gonzo_settings_v1';
+function getSettings(){ try{ return JSON.parse(localStorage.getItem(SET_KEY)||'{}'); }catch(e){ return {}; } }
+function saveSettings(s){ localStorage.setItem(SET_KEY, JSON.stringify(s)); }
+
 let DATA = loadAll();
 let current = new Date();           // 目前檢視的日期
 
@@ -229,9 +246,13 @@ function dayRecord(key){
 function metrics(rec){
   let income=0, orders=0;
   PLATFORMS.forEach(pl=>{ income+=rec.platforms[pl.key].income; orders+=rec.platforms[pl.key].orders; });
-  const h=rec.hours, km=rec.km;
+  const h=rec.hours;
+  // 里程：有手填就用手填；沒填則用「每單平均公里 × 單量」自動估算
+  const avgKm = +getSettings().avgKmPerOrder || 0;
+  let km = rec.km, kmEstimated = false;
+  if(km<=0 && avgKm>0 && orders>0){ km = orders*avgKm; kmEstimated = true; }
   return {
-    income, orders, hours:h, km,
+    income, orders, hours:h, km, kmEstimated,
     hourly: h>0 ? income/h : 0,
     perKm:  km>0 ? income/km : 0,
     ordPerHr: h>0 ? orders/h : 0,
@@ -287,13 +308,14 @@ function render(){
   }
 
   /* --- 數據格 --- */
+  const estTag = `<span class="delta est">≈ 估算</span>`;
   const stats = [
     { num:money(m.income),         delta:fmtDelta(deltaPct(m.income,mPrev.income),'pct'),     lbl:'日收入',  big:true },
     { num:m.hours.toFixed(1)+'hr', delta:fmtDelta(deltaAbs(m.hours,mPrev.hours),'hr'),        lbl:'總工時' },
     { num:money2(m.hourly),        delta:fmtDelta(deltaAbs(m.hourly,mPrev.hourly),'money'),    lbl:'時薪',   small:true },
     { num:m.orders+'單',           delta:fmtDelta(deltaAbs(m.orders,mPrev.orders),'order'),    lbl:'總單量' },
-    { num:m.km.toFixed(2)+'km',    delta:fmtDelta(deltaAbs(m.km,mPrev.km),'km'),               lbl:'里程',   small:true },
-    { num:money2(m.perKm),         delta:fmtDelta(deltaAbs(m.perKm,mPrev.perKm),'money'),      lbl:'每公里', small:true },
+    { num:(m.kmEstimated?'≈':'')+m.km.toFixed(2)+'km', delta:(m.kmEstimated?estTag:fmtDelta(deltaAbs(m.km,mPrev.km),'km')),          lbl:'里程',   small:true },
+    { num:(m.kmEstimated?'≈':'')+money2(m.perKm),      delta:(m.kmEstimated?estTag:fmtDelta(deltaAbs(m.perKm,mPrev.perKm),'money')),  lbl:'每公里', small:true },
     { num:m.ordPerHr.toFixed(1),   delta:fmtDelta(deltaAbs(m.ordPerHr,mPrev.ordPerHr),'dec'),  lbl:'均單量' },
     { num:money2(m.avgOrder),      delta:fmtDelta(deltaAbs(m.avgOrder,mPrev.avgOrder),'money'), lbl:'均單價', small:true },
   ];
@@ -358,6 +380,7 @@ function openSheet(){
   document.getElementById('in_h').value = rec.hours? Math.floor(totMin/60) : '';
   document.getElementById('in_m').value = rec.hours? (totMin%60) : '';
   document.getElementById('in_km').value = rec.km || '';
+  document.getElementById('in_avgkm').value = getSettings().avgKmPerOrder || '';
   PLATFORMS.forEach(pl=>{
     document.getElementById('inc_'+pl.key).value = rec.platforms[pl.key].income || '';
     document.getElementById('ord_'+pl.key).value = rec.platforms[pl.key].orders || '';
@@ -373,6 +396,7 @@ function saveSheet(){
     rec.platforms[pl.key]={ income:+document.getElementById('inc_'+pl.key).value||0,
                             orders:+document.getElementById('ord_'+pl.key).value||0 };
   });
+  const s=getSettings(); s.avgKmPerOrder=+document.getElementById('in_avgkm').value||0; saveSettings(s);
   DATA[key]=rec; saveAll(DATA); closeSheet(); render();
 }
 function clearDay(){
