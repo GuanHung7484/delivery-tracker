@@ -69,8 +69,8 @@
   .stat .num{font-size:23px;font-weight:800;line-height:1.15;white-space:nowrap;}
   .stat .num.small{font-size:19px;}
   .stat .delta{font-size:12.5px;font-weight:600;margin-top:5px;white-space:nowrap;}
-  .stat .delta.up{color:var(--up);}
-  .stat .delta.down{color:var(--down);}
+  .stat .delta.up{color:#ff453a;}    /* 比昨日高＝紅（台股紅漲）*/
+  .stat .delta.down{color:#2dd36f;}  /* 比昨日低＝綠（台股綠跌）*/
   .stat .delta.flat{color:var(--txt3);}
   .stat .lbl{font-size:14.5px;color:var(--txt2);margin-top:6px;font-weight:600;}
 
@@ -162,10 +162,10 @@
   .tabs button.active{background:var(--orange);color:#1a1200;}
 
   /* ---------- 成本 / 淨收入 ---------- */
-  .sum-row .v.cost{color:var(--down);font-weight:700;}
+  .sum-row .v.cost{color:#2dd36f;font-weight:700;}  /* 成本(支出)＝綠 */
   .sum-net{display:flex;align-items:center;justify-content:space-between;padding-top:8px;margin-top:2px;}
   .sum-net .l{font-size:22px;font-weight:800;}
-  .sum-net .v{font-size:26px;font-weight:800;color:var(--green);}
+  .sum-net .v{font-size:26px;font-weight:800;color:#ff453a;}  /* 淨收入＝紅 */
 
   /* ---------- 備份 ---------- */
   .backup{display:flex;gap:11px;}
@@ -178,10 +178,19 @@
   .goal{margin:14px 0 2px;}
   .goal-top{display:flex;justify-content:space-between;font-size:14.5px;font-weight:700;
     color:var(--txt2);margin-bottom:8px;}
-  .goal-top .g-done{color:var(--green);}
+  .goal-top .g-done{color:#ff453a;}
   .goal-bar{height:13px;background:var(--card2);border-radius:7px;overflow:hidden;}
   .goal-fill{height:100%;background:var(--orange);border-radius:7px;transition:width .35s;min-width:3px;}
-  .goal-fill.done{background:var(--green);}
+  .goal-fill.done{background:#ff453a;}
+
+  /* ---------- 跑單目標貼圖 ---------- */
+  .og{display:flex;align-items:center;gap:14px;padding:15px 18px;}
+  .og-stk{flex:none;width:56px;height:56px;}
+  .og-title{font-size:16.5px;font-weight:800;}
+  .og-title b{color:#ff453a;}
+  .og-msg{font-size:14px;color:var(--txt2);margin-top:5px;font-weight:600;line-height:1.55;}
+  .og.done{background:#2a1517;}
+  .og.done .og-title{color:#ff7a7a;}
 
   /* ---------- 週報長條標籤 ---------- */
   .bar-labels{display:flex;gap:2px;margin-top:6px;}
@@ -213,7 +222,7 @@
 <body>
 
 <header>
-  <div class="app">外送收入管家<span class="ver">v1.4</span></div>
+  <div class="app">外送收入管家<span class="ver">v1.5</span></div>
   <div class="rule"></div>
 </header>
 
@@ -238,6 +247,8 @@
     <div class="card" id="summaryCard"></div>
     <!-- 每日目標 -->
     <div id="dayGoal"></div>
+    <!-- 跑單目標貼圖 -->
+    <div id="dayOrderGoal"></div>
     <!-- 數據格 -->
     <div class="grid" id="statGrid"></div>
     <!-- 圓餅圖 -->
@@ -316,6 +327,14 @@
       <div class="one"><input type="number" inputmode="numeric" id="in_goalmonth" placeholder="每月" min="0"><span class="unit">元/月</span></div>
     </div>
     <div class="note">日報／月報會顯示「達成進度條」，週報用每日目標 ×7。</div>
+  </div>
+
+  <div class="field">
+    <div class="flbl">🏁 每日跑單目標<span class="opt">沒達標會給你打氣</span></div>
+    <div class="inputs">
+      <div class="one"><input type="number" inputmode="numeric" id="in_goalorders" placeholder="例如 40" min="0"><span class="unit">單/日</span></div>
+    </div>
+    <div class="note">日報會顯示今日單量 vs 目標：達標給你鼓勵，沒達標給你加油打氣 💪</div>
   </div>
 
   <div class="field">
@@ -443,6 +462,21 @@ function goalBar(cur, goal, label, asCard){
   </div>`;
   return asCard ? `<div class="card" style="padding:15px 18px">${inner}</div>` : inner;
 }
+const STK_HAPPY = `<svg class="og-stk" viewBox="0 0 64 64"><circle cx="32" cy="33" r="22" fill="#ffd86b"/><circle cx="24" cy="30" r="2.8" fill="#5a3b10"/><circle cx="40" cy="30" r="2.8" fill="#5a3b10"/><circle cx="19" cy="37" r="3.2" fill="#ff9e9e"/><circle cx="45" cy="37" r="3.2" fill="#ff9e9e"/><path d="M23 39 q9 9 18 0" stroke="#5a3b10" stroke-width="2.8" fill="none" stroke-linecap="round"/><path d="M52 14 l1.6 4.2 l4.2 1.6 l-4.2 1.6 l-1.6 4.2 l-1.6 -4.2 l-4.2 -1.6z" fill="#ffd86b"/></svg>`;
+const STK_SAD = `<svg class="og-stk" viewBox="0 0 64 64"><circle cx="32" cy="33" r="22" fill="#ffe0a3"/><path d="M19 25 q4.5 -3.5 9 -0.5" stroke="#7a5a1e" stroke-width="2.2" fill="none" stroke-linecap="round"/><path d="M36 24.5 q4.5 -3 9 0.5" stroke="#7a5a1e" stroke-width="2.2" fill="none" stroke-linecap="round"/><circle cx="24" cy="33" r="2.6" fill="#5a3b10"/><circle cx="40" cy="33" r="2.6" fill="#5a3b10"/><path d="M24 47 q8 -7 16 0" stroke="#5a3b10" stroke-width="2.6" fill="none" stroke-linecap="round"/><path d="M49 30 q3.5 5 0 9 q-3.5 -4 0 -9z" fill="#5ec8ff"/></svg>`;
+function renderOrderGoal(orders){
+  const goal=+getSettings().goalOrders||0;
+  const el=document.getElementById('dayOrderGoal');
+  if(goal<=0){ el.innerHTML=''; return; }
+  const done=orders>=goal, remain=Math.max(0,goal-orders);
+  const happy=['太棒了，今日跑單達標！🎉','目標達成，你超讚的 👏','漂亮！維持這個節奏 🔥','達標啦，今天辛苦了 😎'];
+  const cheer=['還差 '+remain+' 單就達標，再衝一下！💪','差一點點，別放棄，加油！🙌','再 '+remain+' 單而已，你一定可以！🛵','慢慢來盡力就好，明天再拚 🌱'];
+  const pool=done?happy:cheer;
+  const msg=(orders<=0 && !done) ? '今天還沒開始，設定好就出發吧！🛵' : pool[current.getDate()%pool.length];
+  el.innerHTML=`<div class="card og ${done?'done':''}">${done?STK_HAPPY:STK_SAD}
+    <div class="og-txt"><div class="og-title">今日跑單目標　<b>${orders}</b> / ${goal} 單</div>
+      <div class="og-msg">${msg}</div></div></div>`;
+}
 
 /* ===== 渲染 ===== */
 function render(){
@@ -475,6 +509,7 @@ function render(){
 
   /* --- 每日目標進度條 --- */
   document.getElementById('dayGoal').innerHTML = goalBar(m.income, +getSettings().goalDay||0, '今日目標', true);
+  renderOrderGoal(m.orders);
 
   /* --- 比較字串 --- */
   function deltaPct(cur,prv){ if(!hasPrev||prv===0) return null; return (cur-prv)/prv*100; }
@@ -694,6 +729,7 @@ function openSheet(){
   document.getElementById('in_fuelkm').value = st.fuelPerKm || '';
   document.getElementById('in_goalday').value = st.goalDay || '';
   document.getElementById('in_goalmonth').value = st.goalMonth || '';
+  document.getElementById('in_goalorders').value = st.goalOrders || '';
   document.getElementById('in_fuel').value = rec.fuel || '';
   document.getElementById('in_cost').value = rec.other || '';
   PLATFORMS.forEach(pl=>{
@@ -718,6 +754,7 @@ function saveSheet(){
   s.fuelPerKm   =+document.getElementById('in_fuelkm').value||0;
   s.goalDay     =+document.getElementById('in_goalday').value||0;
   s.goalMonth   =+document.getElementById('in_goalmonth').value||0;
+  s.goalOrders  =+document.getElementById('in_goalorders').value||0;
   saveSettings(s);
   DATA[key]=rec; saveAll(DATA); closeSheet(); render();
 }
