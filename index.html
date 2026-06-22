@@ -133,12 +133,30 @@
   .stat .delta.est{color:var(--orange);font-weight:700;}
   .field .note{font-size:12.5px;color:var(--txt3);margin-top:7px;line-height:1.55;}
   .field .flbl .opt{color:var(--txt3);font-size:12.5px;font-weight:600;margin-left:8px;}
+
+  /* ---------- 本月統計 ---------- */
+  .month-head{font-size:18px;font-weight:800;margin-bottom:6px;}
+  .month-total{font-size:34px;font-weight:800;color:var(--orange);line-height:1.1;}
+  .month-sub{font-size:14.5px;color:var(--txt2);margin:7px 0 2px;font-weight:600;}
+  .month-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:15px 0 4px;}
+  .mbox{background:var(--card2);border-radius:12px;padding:12px 13px;}
+  .mbox .mn{font-size:19px;font-weight:800;}
+  .mbox .ml{font-size:13.5px;color:var(--txt2);margin-top:4px;font-weight:600;}
+  .best-day{background:#2a2410;border:1px solid #5a4a16;color:var(--orange);border-radius:12px;
+    padding:13px 15px;font-size:16.5px;font-weight:800;margin:13px 0 2px;
+    display:flex;justify-content:space-between;align-items:center;}
+  .bars-cap{font-size:13px;color:var(--txt2);font-weight:600;margin:18px 0 9px;}
+  .bars{display:flex;align-items:flex-end;gap:2px;height:92px;}
+  .bar{flex:1;background:var(--card2);border-radius:3px 3px 0 0;min-height:3px;}
+  .bar.has{background:var(--green);}
+  .bar.cur{background:var(--orange);}
+  .month-empty{color:var(--txt3);font-size:15px;text-align:center;padding:14px 0;line-height:1.6;}
 </style>
 </head>
 <body>
 
 <header>
-  <div class="app">外送收入管家<span class="ver">v1.1</span></div>
+  <div class="app">外送收入管家<span class="ver">v1.2</span></div>
   <div class="rule"></div>
 </header>
 
@@ -160,6 +178,9 @@
   <div class="card">
     <div id="donutArea"></div>
   </div>
+
+  <!-- 本月統計 -->
+  <div class="card" id="monthCard"></div>
 </div>
 
 <button class="fab" id="editFab">✏️ 編輯今日</button>
@@ -325,6 +346,9 @@ function render(){
 
   /* --- 圓餅圖 --- */
   renderDonut(rec, m.income);
+
+  /* --- 本月統計 --- */
+  renderMonth();
 }
 
 function renderDonut(rec, total){
@@ -359,6 +383,62 @@ function renderDonut(rec, total){
       </div>
       <div class="legend">${legend}</div>
     </div>`;
+}
+
+/* ===== 本月統計 ===== */
+function monthMetrics(year, month){           // month 為 0~11
+  let income=0, orders=0, hours=0, km=0, days=0, anyEst=false;
+  let best={day:null, income:0};
+  const daily=[];
+  const daysInMonth = new Date(year, month+1, 0).getDate();
+  for(let d=1; d<=daysInMonth; d++){
+    const key = year+'-'+String(month+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+    const mm = metrics(dayRecord(key));
+    daily.push({day:d, income:mm.income});
+    const worked = mm.income>0 || mm.orders>0 || mm.hours>0;
+    if(worked){
+      income+=mm.income; orders+=mm.orders; hours+=mm.hours; km+=mm.km; days++;
+      if(mm.kmEstimated) anyEst=true;
+      if(mm.income>best.income) best={day:d, income:mm.income};
+    }
+  }
+  return { year, month, daysInMonth, daily, income, orders, hours, km, days, anyEst, best,
+    avgDaily: days>0?income/days:0,
+    hourly:   hours>0?income/hours:0,
+    perKm:    km>0?income/km:0,
+    avgOrder: orders>0?income/orders:0 };
+}
+function mbox(n,l){ return `<div class="mbox"><div class="mn">${n}</div><div class="ml">${l}</div></div>`; }
+function renderMonth(){
+  const y=current.getFullYear(), mo=current.getMonth();
+  const M=monthMetrics(y,mo);
+  let html = `<div class="month-head">📅 本月統計 · ${y}年${mo+1}月</div>`;
+  if(M.days===0){
+    document.getElementById('monthCard').innerHTML =
+      html + `<div class="month-empty">這個月還沒有記錄<br>記了之後就會自動幫你統計整月 📊</div>`;
+    return;
+  }
+  const e = M.anyEst?'≈':'';
+  html += `<div class="month-total">${money(M.income)}</div>
+           <div class="month-sub">出勤 ${M.days} 天 · 平均日收入 ${money(M.avgDaily)}</div>
+           <div class="month-grid">
+             ${mbox(M.hours.toFixed(1)+'hr','總工時')}
+             ${mbox(money2(M.hourly),'平均時薪')}
+             ${mbox(M.orders+'單','總單量')}
+             ${mbox(e+M.km.toFixed(1)+'km','總里程')}
+             ${mbox(e+money2(M.perKm),'平均每公里')}
+             ${mbox(money2(M.avgOrder),'平均單價')}
+           </div>
+           <div class="best-day"><span>🏆 最佳一天　${mo+1}/${M.best.day}</span><span>${money(M.best.income)}</span></div>`;
+  const maxInc = Math.max(1, ...M.daily.map(d=>d.income));
+  let bars='';
+  M.daily.forEach(d=>{
+    const h = d.income>0 ? Math.max(3, Math.round(d.income/maxInc*92)) : 3;
+    const cls = (d.day===current.getDate()) ? 'bar cur' : (d.income>0 ? 'bar has' : 'bar');
+    bars += `<div class="${cls}" style="height:${h}px" title="${mo+1}/${d.day}　${money(d.income)}"></div>`;
+  });
+  html += `<div class="bars-cap">每日收入（${mo+1}月・橘色＝目前檢視的日期）</div><div class="bars">${bars}</div>`;
+  document.getElementById('monthCard').innerHTML = html;
 }
 
 /* ===== 編輯面板 ===== */
