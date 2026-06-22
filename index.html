@@ -151,12 +151,32 @@
   .bar.has{background:var(--green);}
   .bar.cur{background:var(--orange);}
   .month-empty{color:var(--txt3);font-size:15px;text-align:center;padding:14px 0;line-height:1.6;}
+
+  /* ---------- 頁籤 ---------- */
+  .tabs{display:flex;gap:6px;background:var(--card);border-radius:14px;padding:5px;
+    margin:8px auto 4px;max-width:280px;}
+  .tabs button{flex:1;border:none;background:none;color:var(--txt2);font-size:16px;
+    font-weight:700;padding:11px;border-radius:10px;cursor:pointer;}
+  .tabs button.active{background:var(--orange);color:#1a1200;}
+
+  /* ---------- 成本 / 淨收入 ---------- */
+  .sum-row .v.cost{color:var(--down);font-weight:700;}
+  .sum-net{display:flex;align-items:center;justify-content:space-between;padding-top:8px;margin-top:2px;}
+  .sum-net .l{font-size:22px;font-weight:800;}
+  .sum-net .v{font-size:26px;font-weight:800;color:var(--green);}
+
+  /* ---------- 備份 ---------- */
+  .backup{display:flex;gap:11px;}
+  .backup button{flex:1;background:var(--card2);border:none;color:var(--txt);
+    border-radius:13px;padding:15px;font-size:15.5px;font-weight:700;cursor:pointer;}
+  .backup button:active{background:var(--line);}
+  .backup-note{font-size:12.5px;color:var(--txt3);line-height:1.6;}
 </style>
 </head>
 <body>
 
 <header>
-  <div class="app">外送收入管家<span class="ver">v1.2</span></div>
+  <div class="app">外送收入管家<span class="ver">v1.3</span></div>
   <div class="rule"></div>
 </header>
 
@@ -168,19 +188,39 @@
   </div>
   <button class="today-btn" id="todayBtn">回到今天</button>
 
-  <!-- 平台收入總覽 -->
-  <div class="card" id="summaryCard"></div>
-
-  <!-- 數據格 -->
-  <div class="grid" id="statGrid"></div>
-
-  <!-- 圓餅圖 -->
-  <div class="card">
-    <div id="donutArea"></div>
+  <!-- 日報 / 月報 切換 -->
+  <div class="tabs">
+    <button id="tabDay" class="active">日報</button>
+    <button id="tabMonth">月報</button>
   </div>
 
-  <!-- 本月統計 -->
-  <div class="card" id="monthCard"></div>
+  <!-- 日報 -->
+  <div id="dayView">
+    <!-- 平台收入總覽 -->
+    <div class="card" id="summaryCard"></div>
+    <!-- 數據格 -->
+    <div class="grid" id="statGrid"></div>
+    <!-- 圓餅圖 -->
+    <div class="card">
+      <div id="donutArea"></div>
+    </div>
+  </div>
+
+  <!-- 月報 -->
+  <div id="monthView" style="display:none">
+    <div class="card" id="monthCard"></div>
+  </div>
+
+  <!-- 資料備份 -->
+  <div class="card">
+    <div class="month-head">💾 資料備份</div>
+    <div class="backup-note" style="text-align:left;margin:4px 0 13px">把所有紀錄存成 CSV（可用 Excel 打開）。換手機、清除瀏覽器前先「匯出」，之後「匯入」就能還原。</div>
+    <div class="backup">
+      <button id="btnExport">⬇️ 匯出備份</button>
+      <button id="btnImport">⬆️ 匯入備份</button>
+    </div>
+    <input type="file" id="importFile" accept=".csv,text/csv" style="display:none">
+  </div>
 </div>
 
 <button class="fab" id="editFab">✏️ 編輯今日</button>
@@ -214,6 +254,15 @@
       <div class="one"><input type="number" inputmode="decimal" id="in_avgkm" placeholder="例如 2.5" min="0" step="0.1"><span class="unit">km/單</span></div>
     </div>
     <div class="note">自動估算用。例如平均每單跑 2.5 公里就填 2.5，會套用到所有「沒填總里程」的日子；隨時可調。</div>
+  </div>
+
+  <div class="field">
+    <div class="flbl">💸 當日成本<span class="opt">用來算淨收入，沒有可留空</span></div>
+    <div class="inputs">
+      <div class="one"><input type="number" inputmode="numeric" id="in_fuel" placeholder="0" min="0"><span class="unit">油錢</span></div>
+      <div class="one"><input type="number" inputmode="numeric" id="in_cost" placeholder="0" min="0"><span class="unit">其他</span></div>
+    </div>
+    <div class="note">油錢、保養、停車等花費。淨收入 ＝ 總收入 － 成本。</div>
   </div>
 
   <div id="platInputs"></div>
@@ -262,7 +311,7 @@ function dayRecord(key){
   const r = DATA[key] || {};
   const p = {};
   PLATFORMS.forEach(pl=>{ const pr=(r.platforms&&r.platforms[pl.key])||{}; p[pl.key]={income:+pr.income||0, orders:+pr.orders||0}; });
-  return { hours:+r.hours||0, km:+r.km||0, platforms:p };
+  return { hours:+r.hours||0, km:+r.km||0, fuel:+r.fuel||0, other:+r.other||0, platforms:p };
 }
 function metrics(rec){
   let income=0, orders=0;
@@ -272,12 +321,15 @@ function metrics(rec){
   const avgKm = +getSettings().avgKmPerOrder || 0;
   let km = rec.km, kmEstimated = false;
   if(km<=0 && avgKm>0 && orders>0){ km = orders*avgKm; kmEstimated = true; }
+  const cost = (rec.fuel||0) + (rec.other||0);
+  const net = income - cost;
   return {
-    income, orders, hours:h, km, kmEstimated,
+    income, orders, hours:h, km, kmEstimated, cost, net,
     hourly: h>0 ? income/h : 0,
     perKm:  km>0 ? income/km : 0,
     ordPerHr: h>0 ? orders/h : 0,
     avgOrder: orders>0 ? income/orders : 0,
+    netHourly: h>0 ? net/h : 0,
   };
 }
 
@@ -307,6 +359,10 @@ function render(){
   });
   sum += `<div class="sum-line"></div>
           <div class="sum-total"><div class="l">合計</div><div class="v">${money(m.income)}</div></div>`;
+  if(m.income>0 || m.cost>0){
+    sum += `<div class="sum-row" style="padding-top:10px"><div class="l">💸 成本</div><div class="v cost">－${money(m.cost)}</div></div>
+            <div class="sum-net"><div class="l">淨收入</div><div class="v">${money(m.net)}</div></div>`;
+  }
   document.getElementById('summaryCard').innerHTML = sum;
 
   /* --- 比較字串 --- */
@@ -339,6 +395,7 @@ function render(){
     { num:km0+money2(m.perKm),      delta:fmtDelta(deltaAbs(m.perKm,mPrev.perKm),'money'),     lbl:'每公里', small:true },
     { num:m.ordPerHr.toFixed(1),   delta:fmtDelta(deltaAbs(m.ordPerHr,mPrev.ordPerHr),'dec'),  lbl:'均單量' },
     { num:money2(m.avgOrder),      delta:fmtDelta(deltaAbs(m.avgOrder,mPrev.avgOrder),'money'), lbl:'均單價', small:true },
+    { num:money2(m.netHourly),     delta:fmtDelta(deltaAbs(m.netHourly,mPrev.netHourly),'money'), lbl:'淨時薪', small:true },
   ];
   document.getElementById('statGrid').innerHTML = stats.map(s=>
     `<div class="stat"><div class="num ${s.small?'small':''}" style="${s.big?'color:var(--orange)':''}">${s.num}</div>
@@ -387,7 +444,7 @@ function renderDonut(rec, total){
 
 /* ===== 本月統計 ===== */
 function monthMetrics(year, month){           // month 為 0~11
-  let income=0, orders=0, hours=0, km=0, days=0, anyEst=false;
+  let income=0, orders=0, hours=0, km=0, cost=0, days=0, anyEst=false;
   let best={day:null, income:0};
   const daily=[];
   const daysInMonth = new Date(year, month+1, 0).getDate();
@@ -397,12 +454,12 @@ function monthMetrics(year, month){           // month 為 0~11
     daily.push({day:d, income:mm.income});
     const worked = mm.income>0 || mm.orders>0 || mm.hours>0;
     if(worked){
-      income+=mm.income; orders+=mm.orders; hours+=mm.hours; km+=mm.km; days++;
+      income+=mm.income; orders+=mm.orders; hours+=mm.hours; km+=mm.km; cost+=mm.cost; days++;
       if(mm.kmEstimated) anyEst=true;
       if(mm.income>best.income) best={day:d, income:mm.income};
     }
   }
-  return { year, month, daysInMonth, daily, income, orders, hours, km, days, anyEst, best,
+  return { year, month, daysInMonth, daily, income, orders, hours, km, cost, net:income-cost, days, anyEst, best,
     avgDaily: days>0?income/days:0,
     hourly:   hours>0?income/hours:0,
     perKm:    km>0?income/km:0,
@@ -428,6 +485,8 @@ function renderMonth(){
              ${mbox(e+M.km.toFixed(1)+'km','總里程')}
              ${mbox(e+money2(M.perKm),'平均每公里')}
              ${mbox(money2(M.avgOrder),'平均單價')}
+             ${M.cost>0?mbox(money(M.cost),'本月成本'):''}
+             ${M.cost>0?mbox(money(M.net),'本月淨收入'):''}
            </div>
            <div class="best-day"><span>🏆 最佳一天　${mo+1}/${M.best.day}</span><span>${money(M.best.income)}</span></div>`;
   const maxInc = Math.max(1, ...M.daily.map(d=>d.income));
@@ -461,6 +520,8 @@ function openSheet(){
   document.getElementById('in_m').value = rec.hours? (totMin%60) : '';
   document.getElementById('in_km').value = rec.km || '';
   document.getElementById('in_avgkm').value = getSettings().avgKmPerOrder || '';
+  document.getElementById('in_fuel').value = rec.fuel || '';
+  document.getElementById('in_cost').value = rec.other || '';
   PLATFORMS.forEach(pl=>{
     document.getElementById('inc_'+pl.key).value = rec.platforms[pl.key].income || '';
     document.getElementById('ord_'+pl.key).value = rec.platforms[pl.key].orders || '';
@@ -471,7 +532,9 @@ function closeSheet(){ overlay.classList.remove('show'); sheet.classList.remove(
 function saveSheet(){
   const key=ymd(current);
   const h=+document.getElementById('in_h').value||0, m=+document.getElementById('in_m').value||0;
-  const rec={ hours: h + m/60, km:+document.getElementById('in_km').value||0, platforms:{} };
+  const rec={ hours: h + m/60, km:+document.getElementById('in_km').value||0,
+              fuel:+document.getElementById('in_fuel').value||0,
+              other:+document.getElementById('in_cost').value||0, platforms:{} };
   PLATFORMS.forEach(pl=>{
     rec.platforms[pl.key]={ income:+document.getElementById('inc_'+pl.key).value||0,
                             orders:+document.getElementById('ord_'+pl.key).value||0 };
@@ -484,6 +547,60 @@ function clearDay(){
   delete DATA[ymd(current)]; saveAll(DATA); closeSheet(); render();
 }
 
+/* ===== 日報 / 月報 切換 ===== */
+function setView(v){
+  document.getElementById('dayView').style.display   = v==='day'  ? '' : 'none';
+  document.getElementById('monthView').style.display = v==='month'? '' : 'none';
+  document.getElementById('tabDay').classList.toggle('active', v==='day');
+  document.getElementById('tabMonth').classList.toggle('active', v==='month');
+}
+
+/* ===== 匯出 / 匯入備份（CSV）===== */
+const CSV_COLS = ['日期','工時(hr)','里程(km)','油錢','其他成本'];
+PLATFORMS.forEach(pl=>{ CSV_COLS.push(pl.name+'收入'); CSV_COLS.push(pl.name+'單量'); });
+function exportCSV(){
+  const keys=Object.keys(DATA).sort();
+  if(keys.length===0){ alert('還沒有任何資料可以匯出，先記幾天再來吧 🙂'); return; }
+  const rows=[CSV_COLS.join(',')];
+  keys.forEach(k=>{
+    const r=dayRecord(k);
+    const row=[k, r.hours||0, r.km||0, r.fuel||0, r.other||0];
+    PLATFORMS.forEach(pl=>{ row.push(r.platforms[pl.key].income); row.push(r.platforms[pl.key].orders); });
+    rows.push(row.join(','));
+  });
+  const blob=new Blob(['﻿'+rows.join('\r\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(blob);
+  a.download='外送收入備份_'+ymd(new Date())+'.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
+}
+function importCSV(file){
+  const reader=new FileReader();
+  reader.onload=function(ev){
+    try{
+      const text=String(ev.target.result).replace(/^﻿/,'');
+      const lines=text.split(/\r?\n/).filter(l=>l.trim().length);
+      if(lines.length<2) throw 0;
+      const idx={}; lines[0].split(',').forEach((h,i)=>idx[h.trim()]=i);
+      if(!('日期' in idx)) throw 0;
+      const g=(c,name)=> name in idx ? (+c[idx[name]]||0) : 0;
+      let added=0;
+      for(let i=1;i<lines.length;i++){
+        const c=lines[i].split(',');
+        const date=(c[idx['日期']]||'').trim();
+        if(!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+        const rec={ hours:g(c,'工時(hr)'), km:g(c,'里程(km)'), fuel:g(c,'油錢'), other:g(c,'其他成本'), platforms:{} };
+        PLATFORMS.forEach(pl=>{ rec.platforms[pl.key]={ income:g(c,pl.name+'收入'), orders:g(c,pl.name+'單量') }; });
+        DATA[date]=rec; added++;
+      }
+      saveAll(DATA); render();
+      alert('匯入完成！共匯入 '+added+' 天的資料。');
+    }catch(err){ alert('匯入失敗：檔案格式不正確。請使用本 App「匯出備份」產生的 CSV 檔。'); }
+  };
+  reader.readAsText(file);
+}
+
 /* ===== 事件 ===== */
 document.getElementById('prevDay').onclick=()=>shiftDay(-1);
 document.getElementById('nextDay').onclick=()=>shiftDay(1);
@@ -493,8 +610,18 @@ document.getElementById('btnCancel').onclick=closeSheet;
 document.getElementById('overlay').onclick=closeSheet;
 document.getElementById('btnSave').onclick=saveSheet;
 document.getElementById('btnClear').onclick=clearDay;
+document.getElementById('tabDay').onclick=()=>setView('day');
+document.getElementById('tabMonth').onclick=()=>setView('month');
+document.getElementById('btnExport').onclick=exportCSV;
+document.getElementById('btnImport').onclick=()=>document.getElementById('importFile').click();
+document.getElementById('importFile').onchange=function(e){
+  const f=e.target.files[0]; if(!f) return;
+  if(confirm('匯入會覆蓋「相同日期」的資料，其他日期保留。確定匯入嗎？')) importCSV(f);
+  e.target.value='';
+};
 
 buildPlatInputs();
+setView('day');
 render();
 </script>
 </body>
